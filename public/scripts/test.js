@@ -2,9 +2,9 @@ var Comment = React.createClass({
   render: function () {
     return (
       <div className="comment">
-        <h2 className="commentAuthor">
-          {this.props.author}
-        </h2>
+        <span className="commentAuthor">
+          <b>{this.props.author}: </b>
+        </span>
         {this.props.children}
       </div>
     );
@@ -15,7 +15,7 @@ var CommentList = React.createClass({
   render: function() {
     var commentNodes = this.props.data.map(function (comment) {
       return (
-        <Comment author={comment.author} id={comment.id}>
+        <Comment author={comment.author} key={comment.id}>
           {comment.text}
         </Comment>
       );
@@ -71,40 +71,54 @@ var CommentForm = React.createClass({
 
 var CommentBox = React.createClass({
   loadCommentsFromServer: function() {
-    $.ajax({
-      url: this.props.url,
-      dataType: 'json',
-      cache: false,
-      success: function(data) {
-        this.setState({data: data});
-      }.bind(this),
-      error: function(xhr, status, err) {
-        console.error(this.props.url, status, err.toString());
-      }.bind(this)
-    });
+    // $.ajax({
+    //   url: this.props.url,
+    //   dataType: 'json',
+    //   cache: false,
+    //   success: function(data) {
+    //     this.setState({data: data});
+    //   }.bind(this),
+    //   error: function(xhr, status, err) {
+    //     console.error(this.props.url, status, err.toString());
+    //   }.bind(this)
+    // });
   },
   getInitialState: function () {
-    return {data: []};
+    return {data: [], socket: null};
   },
   componentDidMount: function() {
-    this.loadCommentsFromServer();
-    setInterval(this.loadCommentsFromServer, this.props.pollInterval);
-  },
-  handleCommentSubmit: function(comment) {
-    $.ajax({
-      url: this.props.url,
-      dataType: 'json',
-      type: 'POST',
-      data: comment,
-      success: function(data) {
-        this.setState({data: data});
-      }.bind(this),
-      error: function(xhr, status, err) {
-        console.error(this.props.url, status, err.toString());
-      }.bind(this)
+    // this.loadCommentsFromServer();
+    // setInterval(this.loadCommentsFromServer, this.props.pollInterval);
+
+    this.state.socket = io.connect('http://' + document.domain + ':' + location.port + this.props.url);
+    this.state.socket.on('connect', () => {
+      console.log('Socket connect event happened');
+      this.state.socket.emit('my_event', {data: {text: 'I\'m connected!', author: 'SERVER', id: '123123'}});
+    });
+    this.state.socket.on('my_response', (response) => {
+      // console.log(response.data);
+      this.state.data.push(response.data);
+      // console.log(this.state.data);
+      this.setState({data: this.state.data});
     });
   },
+  handleCommentSubmit: function(comment) {
+    // $.ajax({
+    //   url: this.props.url,
+    //   dataType: 'json',
+    //   type: 'POST',
+    //   data: comment,
+    //   success: function(data) {
+    //     this.setState({data: data});
+    //   }.bind(this),
+    //   error: function(xhr, status, err) {
+    //     console.error(this.props.url, status, err.toString());
+    //   }.bind(this)
+    // });
+    this.state.socket.emit('my_msg', {data: comment});
+  },
   render: function() {
+    console.log("CommentBox data", this.state.data);
     return (
       <div className="commentBox">
         <h1>Comments</h1>
