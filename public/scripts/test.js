@@ -13,7 +13,7 @@ var Comment = React.createClass({
 
 var CommentList = React.createClass({
   render: function() {
-    var commentNodes = this.props.data.map(function (comment) {
+    var commentNodes = this.props.data.reverse().map(function (comment) {
       return (
         <Comment author={comment.author} key={comment.id}>
           {comment.text}
@@ -28,9 +28,42 @@ var CommentList = React.createClass({
   }
 });
 
+var RegisterForm = React.createClass({
+  getInitialState: function() {
+    return {nickname: ''};
+  },
+  handleNickChange: function(e) {
+    this.setState({nickname: e.target.value});
+  },
+  handleSubmit: function(e) {
+    e.preventDefault();
+    var nickname = this.state.nickname.trim();
+    if (!nickname) {
+      return;
+    }
+    this.props.onNicknameSubmit({nickname: nickname});
+    this.setState({nickname: ''});
+    // TODO: hide the registration form
+  },
+  render: function () {
+    return (
+      <div className="registerForm">
+        <form className="registerForm" onSubmit={this.handleSubmit}>
+          <input type="text"
+                 placeholder="Choose a nickname"
+                 value={this.state.nickname}
+                 onChange={this.handleNickChange}
+          />
+          <input type="submit" value="Login" />
+        </form>
+      </div>
+    );
+  }
+});
+
 var CommentForm = React.createClass({
   getInitialState: function() {
-    return {author: '', text: ''};
+    return {text: ''};
   },
   handleAuthorChange: function(e) {
     this.setState({author: e.target.value});
@@ -40,23 +73,23 @@ var CommentForm = React.createClass({
   },
   handleSubmit: function(e) {
     e.preventDefault();
-    var author = this.state.author.trim();
+    // var author = this.state.author.trim();
     var text = this.state.text.trim();
-    if (!text || !author) {
+    if (!text) {
       return;
     }
-    this.props.onCommentSubmit({author: author, text: text});
-    this.setState({author: '', text: ''});
+    this.props.onCommentSubmit({text: text});
+    this.setState({text: ''});
   },
   render: function() {
     return (
       <div className="commentForm">
         <form className="commentForm" onSubmit={this.handleSubmit}>
-          <input type="text"
-                 placeholder="Your name"
-                 value={this.state.author}
-                 onChange={this.handleAuthorChange}
-          />
+          {/*<input type="text"*/}
+                 {/*placeholder="Your name"*/}
+                 {/*value={this.state.author}*/}
+                 {/*onChange={this.handleAuthorChange}*/}
+          {/*/>*/}
           <input type="text"
                  placeholder="Say something..."
                  value={this.state.text}
@@ -70,66 +103,38 @@ var CommentForm = React.createClass({
 });
 
 var CommentBox = React.createClass({
-  loadCommentsFromServer: function() {
-    // $.ajax({
-    //   url: this.props.url,
-    //   dataType: 'json',
-    //   cache: false,
-    //   success: function(data) {
-    //     this.setState({data: data});
-    //   }.bind(this),
-    //   error: function(xhr, status, err) {
-    //     console.error(this.props.url, status, err.toString());
-    //   }.bind(this)
-    // });
-  },
   getInitialState: function () {
     return {data: [], socket: null};
   },
   componentDidMount: function() {
-    // this.loadCommentsFromServer();
-    // setInterval(this.loadCommentsFromServer, this.props.pollInterval);
-
     this.state.socket = io.connect('http://' + document.domain + ':' + location.port + this.props.url);
     this.state.socket.on('connect', () => {
-      console.log('Socket connect event happened');
-      this.state.socket.emit('my_event', {data: {text: 'I\'m connected!', author: 'SERVER', id: '123123'}});
+      // console.log('Socket connect event happened');
+      // this.state.socket.emit('my_event', {data: {text: 'I\'m connected!', author: 'SERVER', id: '123123'}});
     });
     this.state.socket.on('my_response', (response) => {
-      // console.log(response.data);
-      this.state.data.push(response.data);
-      // console.log(this.state.data);
-      this.setState({data: this.state.data});
+      this.setState({data: response.data});
     });
   },
   handleCommentSubmit: function(comment) {
-    // $.ajax({
-    //   url: this.props.url,
-    //   dataType: 'json',
-    //   type: 'POST',
-    //   data: comment,
-    //   success: function(data) {
-    //     this.setState({data: data});
-    //   }.bind(this),
-    //   error: function(xhr, status, err) {
-    //     console.error(this.props.url, status, err.toString());
-    //   }.bind(this)
-    // });
     this.state.socket.emit('my_msg', {data: comment});
   },
+  handleRegisterSubmit: function (form_data) {
+    this.state.socket.emit('register', {data: form_data.nickname})
+  },
   render: function() {
-    console.log("CommentBox data", this.state.data);
     return (
       <div className="commentBox">
         <h1>Comments</h1>
         <CommentList data={this.state.data}/>
         <CommentForm onCommentSubmit={this.handleCommentSubmit}/>
+        <RegisterForm onNicknameSubmit={this.handleRegisterSubmit}/>
       </div>
     );
   }
 });
 
 ReactDOM.render(
-  <CommentBox url="/api/comments" pollInterval={1000} />,
+  <CommentBox url="/api/chat" />,
   document.getElementById('content')
 );

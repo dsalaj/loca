@@ -3,7 +3,7 @@ import os
 import time
 from flask import Flask, Response, render_template, session, request
 from flask_socketio import SocketIO, emit, join_room, leave_room, \
-    close_room, rooms, disconnect
+    close_room, rooms, disconnect, Namespace
 import eventlet
 eventlet.monkey_patch()
 
@@ -12,72 +12,52 @@ app.add_url_rule('/', 'root', lambda: app.send_static_file('index.html'))
 
 async_mode = None
 socketio = SocketIO(app, async_mode=async_mode)
-thread = None
-namespace = '/api/comments'
+
+active_users = {}
 
 
-@app.route(namespace, methods=['GET', 'POST'])
-def comments_handler():
-    with open('comments.json', 'r') as f:
-        comments = json.loads(f.read())
+class Chat(Namespace):
+    def on_disconnect(self):
+        print('Client disconnected', request.sid)
+        if request.sid in active_users:
+            del active_users[request.sid]
 
-    if request.method == 'POST':
-        new_comment = request.form.to_dict()
+    def on_register(self, message):
+        session['receive_count'] = session.get('receive_count', 0) + 1
+        if request.sid in active_users:
+            emit('register', {'data': 'failed', 'reason': 'already_connected'})
+            print 'ERROR: User already registered!'
+        elif message['data'] in active_users.values():
+            emit('register', {'data': 'failed', 'reason': 'nickname_occupied'})
+            print 'ERROR: Nickname already taken!'
+        else:
+            active_users[request.sid] = message['data']
+            emit('register', {'data': 'success'})
+
+    def on_my_event(self, message):
+        session['receive_count'] = session.get('receive_count', 0) + 1
+        message['data']['id'] = int(time.time() * 1000)
+
+    def on_my_msg(self, message):
+        if request.sid not in active_users:
+            return  # ERROR: user not registered
+        with open('comments.json', 'r') as f:
+            comments = json.loads(f.read())
+
+        new_comment = message['data']
+        new_comment['author'] = active_users[request.sid]
         new_comment['id'] = int(time.time() * 1000)
         comments.append(new_comment)
 
         with open('comments.json', 'w') as f:
             f.write(json.dumps(comments, indent=4, separators=(',', ': ')))
 
-    return Response(
-        json.dumps(comments),
-        mimetype='application/json',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Access-Control-Allow-Origin': '*'
-        }
-    )
+        session['receive_count'] = session.get('receive_count', 0) + 1
+
+        emit('my_response', {'data': comments, 'count': session['receive_count']}, broadcast=True)
 
 
-# def background_thread():
-#     """Example of how to send server generated events to clients."""
-#     count = 0
-#     while True:
-#         socketio.sleep(10)
-#         count += 1
-#         socketio.emit('my_response',
-#                       {'data': 'Server generated event', 'count': count},
-#                       namespace=namespace)
-#
-#
-# @socketio.on('connect', namespace=namespace)
-# def test_connect():
-#     global thread
-#     if thread is None:
-#         thread = socketio.start_background_task(target=background_thread)
-#     emit('my_response', {'data': 'Connected', 'count': 0})
-
-
-@socketio.on('disconnect', namespace=namespace)
-def test_disconnect():
-    print('Client disconnected', request.sid)
-
-
-@socketio.on('my_event', namespace=namespace)
-def test_message(message):
-    session['receive_count'] = session.get('receive_count', 0) + 1
-    message['data']['id'] = int(time.time() * 1000)
-    emit('my_response',
-         {'data': message['data'], 'count': session['receive_count']})
-
-
-@socketio.on('my_msg', namespace=namespace)
-def form_message(message):
-    session['receive_count'] = session.get('receive_count', 0) + 1
-    message['data']['id'] = int(time.time() * 1000)
-    emit('my_response',
-         {'data': message['data'], 'count': session['receive_count']})
-
+socketio.on_namespace(Chat('/api/chat'))
 
 if __name__ == '__main__':
     app.secret_key = 'super secret key'
