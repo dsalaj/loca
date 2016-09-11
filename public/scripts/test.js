@@ -48,6 +48,7 @@ var RegisterForm = React.createClass({
   render: function () {
     return (
       <div className="registerForm">
+        <p>Choose a nickname to joint the chat.</p>
         <form className="registerForm" onSubmit={this.handleSubmit}>
           <input type="text"
                  placeholder="Choose a nickname"
@@ -104,7 +105,7 @@ var CommentForm = React.createClass({
 
 var CommentBox = React.createClass({
   getInitialState: function () {
-    return {data: [], socket: null};
+    return {data: [], socket: null, registered: false};
   },
   componentDidMount: function() {
     this.state.socket = io.connect('http://' + document.domain + ':' + location.port + this.props.url);
@@ -115,6 +116,12 @@ var CommentBox = React.createClass({
     this.state.socket.on('my_response', (response) => {
       this.setState({data: response.data});
     });
+    this.state.socket.on('register', (response) => {
+      if (response.data == 'success') {
+        this.setState({data: this.state.data, socket: this.state.socket, registered: true});
+        // TODO: How to partially update element state?
+      }
+    });
   },
   handleCommentSubmit: function(comment) {
     this.state.socket.emit('my_msg', {data: comment});
@@ -123,12 +130,20 @@ var CommentBox = React.createClass({
     this.state.socket.emit('register', {data: form_data.nickname})
   },
   render: function() {
+    var form;
+    if (this.state.registered) {
+      form = <CommentForm onCommentSubmit={this.handleCommentSubmit}/>;
+    } else {
+      form = <RegisterForm onNicknameSubmit={this.handleRegisterSubmit}/>;
+    }
     return (
       <div className="commentBox">
-        <h1>Comments</h1>
+        <div className="title">
+          <h1>LOCA</h1>
+          <span>LOcation aware ChAt</span>
+        </div>
         <CommentList data={this.state.data}/>
-        <CommentForm onCommentSubmit={this.handleCommentSubmit}/>
-        <RegisterForm onNicknameSubmit={this.handleRegisterSubmit}/>
+        {form}
       </div>
     );
   }

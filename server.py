@@ -34,10 +34,6 @@ class Chat(Namespace):
             active_users[request.sid] = message['data']
             emit('register', {'data': 'success'})
 
-    def on_my_event(self, message):
-        session['receive_count'] = session.get('receive_count', 0) + 1
-        message['data']['id'] = int(time.time() * 1000)
-
     def on_my_msg(self, message):
         if request.sid not in active_users:
             return  # ERROR: user not registered
