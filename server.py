@@ -4,44 +4,46 @@ import time
 from flask import Flask, Response, render_template, session, request
 from flask_socketio import SocketIO, emit, join_room, leave_room, \
     close_room, rooms, disconnect, Namespace
+from flask.ext.pymongo import PyMongo
 import eventlet
 eventlet.monkey_patch()
 
 app = Flask(__name__, static_url_path='', static_folder='public')
 app.add_url_rule('/', 'root', lambda: app.send_static_file('index.html'))
 
+mongo = PyMongo(app)
+
 async_mode = None
 socketio = SocketIO(app, async_mode=async_mode)
 
-active_users = {}
-
 
 class Chat(Namespace):
+
     def on_disconnect(self):
         print('Client disconnected', request.sid)
-        if request.sid in active_users:
-            del active_users[request.sid]
+        if mongo.db.users.find({"id": request.sid}):
+            mongo.db.users.remove({"id": request.sid})
 
     def on_register(self, message):
         session['receive_count'] = session.get('receive_count', 0) + 1
-        if request.sid in active_users:
+        if mongo.db.users.find({"id": request.sid}).count() > 0:
             emit('register', {'data': 'failed', 'reason': 'already_connected'})
             print 'ERROR: User already registered!'
-        elif message['data'] in active_users.values():
+        elif mongo.db.users.find({"nickname": message['data']}).count() > 0:
             emit('register', {'data': 'failed', 'reason': 'nickname_occupied'})
             print 'ERROR: Nickname already taken!'
         else:
-            active_users[request.sid] = message['data']
+            mongo.db.users.insert({"id": request.sid, "nickname": message['data']})
             emit('register', {'data': 'success'})
 
     def on_my_msg(self, message):
-        if request.sid not in active_users:
+        if mongo.db.users.find({"id": request.sid}).count() == 0:
             return  # ERROR: user not registered
         with open('comments.json', 'r') as f:
             comments = json.loads(f.read())
 
         new_comment = message['data']
-        new_comment['author'] = active_users[request.sid]
+        new_comment['author'] = mongo.db.users.find_one({"id": request.sid})['nickname']
         new_comment['id'] = int(time.time() * 1000)
         comments.append(new_comment)
 
