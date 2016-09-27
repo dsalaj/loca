@@ -5,7 +5,9 @@ from flask import Flask, Response, render_template, session, request
 from flask_socketio import SocketIO, emit, join_room, leave_room, \
     close_room, rooms, disconnect, Namespace
 from flask.ext.pymongo import PyMongo
+from pymongo import GEO2D
 from bson import json_util
+from bson.son import SON
 import eventlet
 eventlet.monkey_patch()
 
@@ -34,7 +36,17 @@ class Chat(Namespace):
             emit('register', {'data': 'failed', 'reason': 'nickname_occupied'})
             print 'ERROR: Nickname already taken!'
         else:
-            mongo.db.users.insert({"id": request.sid, "nickname": message['data']})
+            mongo.db.users.insert({
+                "id": request.sid,
+                "nickname": message['data'],
+                "loc": [message['lat'], message['lng']]
+                # "loc": {
+                #     "lat": message['lat'],
+                #     "lng": message['lng']
+                # }
+            })
+            mongo.db.users.create_index([("loc", GEO2D)])
+            print "User", message['data'], "successfully registered with lat=", message['lat'], "lng=", message['lng']
             emit('register', {'data': 'success'})
 
     def on_my_msg(self, message):
@@ -42,9 +54,15 @@ class Chat(Namespace):
             return  # ERROR: user not registered
 
         new_comment = message['data']
-        new_comment['author'] = mongo.db.users.find_one({"id": request.sid})['nickname']
+        user = mongo.db.users.find_one({"id": request.sid})
+        new_comment['author'] = user['nickname']
         new_comment['id'] = int(time.time() * 1000)
         mongo.db.comments.insert(new_comment)
+        neighbours = mongo.db.command(SON({
+            'geoNear': "users",
+            'near': user['loc']
+        }))
+        print neighbours["results"]
 
         session['receive_count'] = session.get('receive_count', 0) + 1
 

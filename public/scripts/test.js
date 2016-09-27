@@ -105,7 +105,8 @@ var CommentForm = React.createClass({
 
 var CommentBox = React.createClass({
   getInitialState: function () {
-    return {data: [], socket: null, registered: false};
+    return {data: [], socket: null, registered: false,
+            localized: false, lat: null, lng: null};
   },
   componentDidMount: function() {
     this.state.socket = io.connect('http://' + document.domain + ':' + location.port + this.props.url);
@@ -118,16 +119,32 @@ var CommentBox = React.createClass({
     });
     this.state.socket.on('register', (response) => {
       if (response.data == 'success') {
-        this.setState({data: this.state.data, socket: this.state.socket, registered: true});
-        // TODO: How to partially update element state?
+        this.setState({registered: true});
       }
     });
+    this.getLocation();
   },
   handleCommentSubmit: function(comment) {
     this.state.socket.emit('my_msg', {data: comment});
   },
   handleRegisterSubmit: function (form_data) {
-    this.state.socket.emit('register', {data: form_data.nickname})
+    this.state.socket.emit('register', {
+      data: form_data.nickname,
+      lat: this.state.lat,
+      lng: this.state.lng
+    })
+  },
+  getLocation: function () {
+    if (Modernizr.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        var latitude = position.coords.latitude;
+        var longitude = position.coords.longitude;
+        console.log("lat = " + latitude + ", lng = " + longitude);
+        this.setState({localized: true, lat: latitude, lng: longitude});
+      });
+    } else {
+      // no native support; IP localization fallback?
+    }
   },
   render: function() {
     var form;
@@ -136,16 +153,28 @@ var CommentBox = React.createClass({
     } else {
       form = <RegisterForm onNicknameSubmit={this.handleRegisterSubmit}/>;
     }
-    return (
-      <div className="commentBox">
-        <div className="title">
-          <h1>LOCA</h1>
-          <span>LOcation aware ChAt</span>
+    if (this.state.localized) {
+      return (
+        <div className="commentBox">
+          <div className="title">
+            <h1>LOCA</h1>
+            <span>LOcation aware ChAt</span>
+          </div>
+          <CommentList data={this.state.data}/>
+          {form}
         </div>
-        <CommentList data={this.state.data}/>
-        {form}
-      </div>
-    );
+      );
+    } else {
+      return (
+          <div className="commentBox">
+            <div className="title">
+              <h1>LOCA</h1>
+              <span>LOcation aware ChAt</span>
+            </div>
+            <p>Please share your location.</p>
+          </div>
+      );
+    }
   }
 });
 
